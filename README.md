@@ -1,12 +1,12 @@
-#ThinkFast
+# ThinkFast
 
-##Fine-Tuning Qwen2.5 for Efficient, Compressed Reasoning
+## Fine-Tuning Qwen2.5 for Efficient, Compressed Reasoning
 
-📌 Overview
+### 📌 Overview
 
 ThinkFast is an experiment in fine-tuning Qwen2.5 to develop structured, compressed reasoning. Instead of enforcing verbose step-by-step explanations, this project explores whether LLMs can reason efficiently—producing the correct answer while minimizing token usage.
 
-🛠 Features
+### 🛠 Features
 
 - ✅ RLHF Training with GRPO – Reinforcing structured reasoning with reward shaping.
 
@@ -22,21 +22,22 @@ ThinkFast is an experiment in fine-tuning Qwen2.5 to develop structured, compres
 ***This is a work in progress***
 
 
-📌 Quick Start
+### 📌 Quick Start
 
 - 1. Set up env
-
+'''
 conda create -n thinkfast python=3.11 -y
 conda activate thinkfast
 pip install torch transformers huggingface_hub unsloth trl accelerate vllm
 pip install -r requirements.txt
+'''
 
 There is a setup.sh that might work for you if you dont have conda - not fully tested  - ymmv
 
 - 2. Run the GRPO fune tuner
-
+'''
 python grpo.py --model <hf-model-name>  --train_steps 1000
-
+'''
 - 3. gguf export is in grpo.py  - change False to True on the lines with your preferred export formats
 you will need llama.cpp in your directory - todo arg parse this
 
