@@ -161,27 +161,7 @@ def xmlcount_reward_func(completions, **kwargs) -> list[float]:
     contents = [completion[0]["content"] for completion in completions]
     return [count_xml(c) for c in contents]
 
-
-
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Fine-tune Qwen model with GRPO.")
-
-    # Model and Training Control
-    parser.add_argument("--model", type=str, default=DEFAULT_MODEL, help="Hugging Face model name")
-    parser.add_argument("--resume", action="store_true", help="Resume from latest checkpoint if available")
-
-    # Training Hyperparameters
-    parser.add_argument("--short_training_steps", type=int, default=1, help="Quick test training steps")
-    parser.add_argument("--num_train_epochs", type=int, default=1, help="Number of training epochs")
-    parser.add_argument("--max_steps", type=int, default=-1, help="Override max training steps (default: uses short_training_steps)")
-    parser.add_argument("--save_steps", type=int, default=250, help="Checkpoint save frequency")
-    parser.add_argument("--batch_size", type=int, default=1, help="Per-device batch size")
-    parser.add_argument("--grad_accum", type=int, default=1, help="Gradient accumulation steps")
-
-    args = parser.parse_args()
-
+def load_model_and_tokenizer():
     model_name = setup_model()
     print(f"{model_name} should now be present and ready for fine tuning")
 
@@ -198,7 +178,6 @@ def main():
         gpu_memory_utilization = 0.95, # Reduce if out of memory
         enforce_eager = True   # SWA conflict so disable during training
     )
-
     
     model = FastLanguageModel.get_peft_model(
         model,
@@ -214,20 +193,14 @@ def main():
     )
 
     model.config.sliding_window = None  # Disables SWA during training
+    return model,tokenizer
 
-    """### Data Prep
-    leverage [@willccbb](https://gist.github.com/willccbb/4676755236bb08cab5f4e54a0475d6fb) for data prep and all reward functions.
-    """
-    dataset = get_gsm8k_questions()
-
-    """
-    
-    ### Train the model
-    
-    Now set up GRPO Trainer and all configurations!
-    """
+def training_setup( model = None, tokenizer = None, dataset = dataset, resume_from_checkpoint = False):
 
     max_prompt_length = 256
+    max_seq_length = 1024 # Can increase for longer reasoning traces
+    short_training_steps = 1
+    
     training_args = GRPOConfig(
         learning_rate = 5e-6,
         adam_beta1 = 0.9,
@@ -247,15 +220,10 @@ def main():
         save_steps = 250,
         max_grad_norm = 0.1,
         report_to = "none", # Can use Weights & Biases
-        resume_from_checkpoint=args.resume,
+        resume_from_checkpoint=resume_from_checkpoint,
         output_dir = "outputs",
     )
 
-
-    sample = dataset[0]  # Get first entry
-    formatted_sample = tokenizer.apply_chat_template(sample["prompt"], tokenize=False)
-    print(f"sample:{formatted_sample}")
-    
     trainer = GRPOTrainer(
         model = model,
         processing_class = tokenizer,
@@ -267,9 +235,42 @@ def main():
             correctness_reward_func,
         ],
         args = training_args,
-        train_dataset = dataset,
+        train_dataset = dataset
     )
+    return trainer
 
+def main():
+    parser = argparse.ArgumentParser(description="Fine-tune Qwen model with GRPO.")
+
+    # Model and Training Control
+    parser.add_argument("--model", type=str, default=DEFAULT_MODEL, help="Hugging Face model name")
+    parser.add_argument("--resume", action="store_true", help="Resume from latest checkpoint if available")
+
+    # Training Hyperparameters
+    parser.add_argument("--short_training_steps", type=int, default=1, help="Quick test training steps")
+    parser.add_argument("--num_train_epochs", type=int, default=1, help="Number of training epochs")
+    parser.add_argument("--max_steps", type=int, default=-1, help="Override max training steps (default: uses short_training_steps)")
+    parser.add_argument("--save_steps", type=int, default=250, help="Checkpoint save frequency")
+    parser.add_argument("--batch_size", type=int, default=1, help="Per-device batch size")
+    parser.add_argument("--grad_accum", type=int, default=1, help="Gradient accumulation steps")
+
+    args = parser.parse_args()
+    model,tokenizer = load_model_and_tokenizer()
+
+    #duplicated in load model and tokenizer  
+    max_seq_length = 1024 # Can increase for longer reasoning traces
+    lora_rank = 8 # 32 Larger rank = smarter, but slower
+
+    """### Data Prep
+    leverage [@willccbb](https://gist.github.com/willccbb/4676755236bb08cab5f4e54a0475d6fb) for data prep and all reward functions.
+    """
+    dataset = get_gsm8k_questions()
+    print(dataset)
+    """
+    ### Train the model
+    Now set up GRPO Trainer and all configurations!
+    """
+    trainer = training_setup(resume_from_checkpoint=args.resume, model=model, tokenizer=tokenizer, dataset=get_gsm8k_questions())
     trainer.train()
 
     print("Done.")
