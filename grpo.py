@@ -2,6 +2,7 @@
 #### Portions of this code are derived from Unsloth's blog and open-source repository
 # Copyright 2024 Unsloth AI (Apache 2.0 License)
 # Original source: https://github.com/unslothai
+
 """
 Load model , and set parameters
 """
@@ -104,55 +105,55 @@ model = FastLanguageModel.get_peft_model(
     
 )
 
-model.config.sliding_window = None  # ✅ Disables SWA during training
+model.config.sliding_window = None  #  Disables SWA during training
 
 
-full_chat_template = tokenizer.chat_template  # Full template as a string
+# full_chat_template = tokenizer.chat_template  # Full template as a string
 
-# Define the original assistant response block to replace
-old_assistant_block = """{%- elif message.role == "assistant" %}
-    {{- '<|im_start|>' + message.role }}
-    {%- if message.content %}
-        {{- '\\n' + message.content }}
-    {%- endif %}
-    {%- for tool_call in message.tool_calls %}
-        {%- if tool_call.function is defined %}
-            {%- set tool_call = tool_call.function %}
-        {%- endif %}
-        {{- '\\n<tool_call>\\n{"name": "' }}
-        {{- tool_call.name }}
-        {{- '", "arguments": ' }}
-        {{- tool_call.arguments | tojson }}
-        {{- '}\\n</tool_call>' }}
-    {%- endfor %}
-    {{- '<|im_end|>\\n' }}"""
+# # Define the original assistant response block to replace
+# old_assistant_block = """{%- elif message.role == "assistant" %}
+#     {{- '<|im_start|>' + message.role }}
+#     {%- if message.content %}
+#         {{- '\\n' + message.content }}
+#     {%- endif %}
+#     {%- for tool_call in message.tool_calls %}
+#         {%- if tool_call.function is defined %}
+#             {%- set tool_call = tool_call.function %}
+#         {%- endif %}
+#         {{- '\\n<tool_call>\\n{"name": "' }}
+#         {{- tool_call.name }}
+#         {{- '", "arguments": ' }}
+#         {{- tool_call.arguments | tojson }}
+#         {{- '}\\n</tool_call>' }}
+#     {%- endfor %}
+#     {{- '<|im_end|>\\n' }}"""
 
-# Define the new assistant block with reasoning separation
-new_assistant_block = """{%- elif message.role == "assistant" %}
-    {{- '<|im_start|>' + message.role }}
-    {%- if message.content and not message.tool_calls %}
-        {{- '\\n<reasoning>\\n' + message.content.splitlines()[0] + '\\n</reasoning>\\n' }}
-        {{- message.content.splitlines()[1:] | join('\\n') }}
-    {%- elif message.content %}
-        {{- '\\n' + message.content }}
-    {%- endif %}
-    {%- for tool_call in message.tool_calls %}
-        {%- if tool_call.function is defined %}
-            {%- set tool_call = tool_call.function %}
-        {%- endif %}
-        {{- '\\n<tool_call>\\n{"name": "' }}
-        {{- tool_call.name }}
-        {{- '", "arguments": ' }}
-        {{- tool_call.arguments | tojson }}
-        {{- '}\\n</tool_call>' }}
-    {%- endfor %}
-    {{- '<|im_end|>\\n' }}"""
+# # Define the new assistant block with reasoning separation
+# new_assistant_block = """{%- elif message.role == "assistant" %}
+#     {{- '<|im_start|>' + message.role }}
+#     {%- if message.content and not message.tool_calls %}
+#         {{- '\\n<reasoning>\\n' + message.content.splitlines()[0] + '\\n</reasoning>\\n' }}
+#         {{- message.content.splitlines()[1:] | join('\\n') }}
+#     {%- elif message.content %}
+#         {{- '\\n' + message.content }}
+#     {%- endif %}
+#     {%- for tool_call in message.tool_calls %}
+#         {%- if tool_call.function is defined %}
+#             {%- set tool_call = tool_call.function %}
+#         {%- endif %}
+#         {{- '\\n<tool_call>\\n{"name": "' }}
+#         {{- tool_call.name }}
+#         {{- '", "arguments": ' }}
+#         {{- tool_call.arguments | tojson }}
+#         {{- '}\\n</tool_call>' }}
+#     {%- endfor %}
+#     {{- '<|im_end|>\\n' }}"""
 
-# Perform safe replacement
-updated_chat_template = full_chat_template.replace(old_assistant_block, new_assistant_block)
+# # Perform safe replacement
+# updated_chat_template = full_chat_template.replace(old_assistant_block, new_assistant_block)
 
-# Apply the modified chat template in memory
-tokenizer.chat_template = updated_chat_template
+# # Apply the modified chat template in memory
+# tokenizer.chat_template = updated_chat_template
 
 """### Data Prep
 leverage [@willccbb](https://gist.github.com/willccbb/4676755236bb08cab5f4e54a0475d6fb) for data prep and all reward functions.
@@ -282,17 +283,7 @@ training_args = GRPOConfig(
     output_dir = "outputs",
 )
 
-"""And let's run the trainer! If you scroll up, you'll see a table of rewards. The goal is to see the `reward` column increase!
 
-You might have to wait 150 to 200 steps for any action. You'll probably get 0 reward for the first 100 steps. Please be patient!
-
-| Step | Training Loss | reward    | reward_std | completion_length | kl       |
-|------|---------------|-----------|------------|-------------------|----------|
-| 1    | 0.000000      | 0.125000  | 0.000000   | 200.000000        | 0.000000 |
-| 2    | 0.000000      | 0.072375  | 0.248112   | 200.000000        | 0.000000 |
-| 3    | 0.000000      | -0.079000 | 0.163776   | 182.500000        | 0.000005 |
-
-"""
 sample = dataset[0]  # Get first entry
 formatted_sample = tokenizer.apply_chat_template(sample["prompt"], tokenize=False)
 
@@ -313,6 +304,7 @@ trainer = GRPOTrainer(
 trainer.train()
 
 print("Done.")
+
 """
 ### Inference
 Now let's try the model we just trained! First, let's first try the model without any GRPO trained:
@@ -335,6 +327,7 @@ output = model.fast_generate(
 )[0].outputs[0].text
 
 print(f"pre-trained output:{output}")
+
 
 """And now with the LoRA we just trained with GRPO - we first save the LoRA first!"""
 
@@ -359,15 +352,9 @@ output = model.fast_generate(
     lora_request = model.load_lora("grpo_saved_lora"),
 )[0].outputs[0].text
 
-print(f"fine tuned output:{output}")
+print(f"\n\nfine tuned output:{output}")
 
-"""Our reasoning model is much better - it's not always correct, since we only trained it for an hour or so - it'll be better if we extend the sequence length and train for longer!
 
-<a name="Save"></a>
-### Saving to float16 for VLLM
-
-We also support saving to `float16` directly. Select `merged_16bit` for float16 or `merged_4bit` for int4. We also allow `lora` adapters as a fallback. Use `push_to_hub_merged` to upload to your Hugging Face account! You can go to https://huggingface.co/settings/tokens for your personal tokens.
-"""
 
 # Merge to 16bit
 if True: model.save_pretrained_merged("model", tokenizer, save_method = "merged_16bit",)
@@ -381,7 +368,9 @@ if False: model.push_to_hub_merged("hf/model", tokenizer, save_method = "merged_
 if False: model.save_pretrained_merged("model", tokenizer, save_method = "lora",)
 if False: model.push_to_hub_merged("hf/model", tokenizer, save_method = "lora", token = "")
 
-"""### GGUF / llama.cpp Conversion
+"""
+
+### GGUF / llama.cpp Conversion
 To save to `GGUF` / `llama.cpp`, we support it natively now! We clone `llama.cpp` and we default save it to `q8_0`. We allow all methods like `q4_k_m`. Use `save_pretrained_gguf` for local saving and `push_to_hub_gguf` for uploading to HF.
 
 Some supported quant methods (full list on our [Wiki page](https://github.com/unslothai/unsloth/wiki#gguf-quantization-options)):
@@ -415,6 +404,8 @@ if False:
         token = "",
     )
 
+
+# needed to make a graceful exit from multi-gpu
 import torch.distributed as dist
 if dist.is_initialized():
     print("Destroying NCCL process group before exit...")
