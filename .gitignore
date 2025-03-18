@@ -1,4 +1,56 @@
-# Byte-compiled / optimized / DLL files
+# 🔥 Python Basics
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+*.egg
+
+# 🔥 Conda & Pip Environment Files (keep `env.lock` or `requirements.txt` instead)
+*.conda
+*.ipynb_checkpoints
+pip-log.txt
+pip-delete-this-directory.txt
+
+# 🔥 Hugging Face Model Cache (if storing models separately)
+huggingface/
+~/.cache/huggingface/
+
+# 🔥 Checkpoints, Logs, and Training Outputs
+output/
+logs/
+wandb/
+*.log
+*.out
+*.err
+*.jsonl
+tensorboard/
+checkpoint-*/
+
+# 🔥 Model Weights (HF Models & GGUF Exports)
+model/
+*.safetensors
+*.ckpt
+*.gguf
+*.ggml
+*.bin
+
+# 🔥 Jupyter Notebook & VSCode Stuff
+.ipynb_checkpoints/
+.vscode/
+*.swp
+
+# 🔥 Secrets & Credentials
+*.token
+*.api
+.env
+
+
+
 __pycache__/
 *.py[cod]
 *$py.class
@@ -172,3 +224,4 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
