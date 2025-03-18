@@ -9,6 +9,7 @@ Load model , and set parameters
 
 from unsloth import FastLanguageModel # FastQwen2Model reports missing LORA_REQUEST_ID - might be woth finding out why? 
 import os
+import glob
 import argparse
 import torch
 import json
@@ -43,6 +44,10 @@ XML_COT_FORMAT = """\
 {answer}
 </answer>
 """
+def get_latest_checkpoint(output_dir="outputs"):
+    """Finds the latest checkpoint directory based on the highest checkpoint number."""
+    checkpoints = sorted(glob.glob(f"{output_dir}/checkpoint-*"), key=os.path.getmtime, reverse=True)
+    return checkpoints[0] if checkpoints else None  # Return the latest checkpoint, or None if none exist
 
 def setup_model(model):
     """Ensure the model is cached locally and return its exact path."""
@@ -210,9 +215,18 @@ def export_model(model=None, tokenizer=None):
         )
 
 
-def load_model_and_tokenizer(model,max_seq_length,lora_rank):
+def load_model_and_tokenizer(model,max_seq_length,lora_rank, resume_from_checkpoint=False):
     model_name = setup_model(model)
     print(f"{model_name} should now be present and ready for fine tuning")
+
+    # If resuming, use the latest checkpoint directory instead of the base model
+    #if resume_from_checkpoint:
+    #    checkpoint_path = get_latest_checkpoint("outputs")
+    #    if checkpoint_path:
+    #        print(f"Resuming model from checkpoint: {checkpoint_path}")
+    #        model_name = checkpoint_path  # Override with checkpoint path
+    
+    print(f"Loading model from: {model_name}")
 
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name = model_name,
@@ -246,7 +260,7 @@ def training_setup( model, tokenizer, training_dataset, max_seq_length, save_ste
     
     # Prioritize `max_steps` if explicitly set, otherwise use `num_train_epochs`
     effective_max_steps = max_steps if max_steps > 0 else -1
-
+    
     training_args = GRPOConfig(
         learning_rate = 5e-6,
         adam_beta1 = 0.9,
@@ -308,6 +322,7 @@ def main():
         model=args.model,
         max_seq_length=args.max_seq_length,
         lora_rank=args.lora_rank,
+        resume_from_checkpoint=args.resume,
     )
 
     """### Data Prep
@@ -329,7 +344,7 @@ def main():
         max_seq_length=args.max_seq_length,
     )
 
-    trainer.train()
+    trainer.train(resume_from_checkpoint=args.resume)
     
     # needed to make a graceful exit from multi-gpu
     if dist.is_initialized():
