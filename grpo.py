@@ -44,19 +44,16 @@ XML_COT_FORMAT = """\
 </answer>
 """
 
-def setup_model():
+def setup_model(model):
     """Ensure the model is cached locally and return its exact path."""
-    parser = argparse.ArgumentParser(description="Download and cache a model from Hugging Face.")
-    parser.add_argument("--model", type=str, default=DEFAULT_MODEL, help="Hugging Face model name")
-    args, _ = parser.parse_known_args()
 
     # Step 1: Ensure model is cached locally
     if not os.path.exists(SAVE_PATH):
-        print(f"Downloading model: {args.model} to {SAVE_PATH}")
+        print(f"Downloading model: {model} to {SAVE_PATH}")
 
         # Cache the model and get the actual path
         model_dir = snapshot_download(
-            repo_id=args.model,
+            repo_id=model,
             cache_dir=SAVE_PATH,
             allow_patterns=["*.safetensors", "*.json", "*.txt", "*.model"],
             ignore_patterns=["*.bin"]
@@ -66,7 +63,7 @@ def setup_model():
 
     else:
         # Model directory already exists, find the latest snapshot by modification time
-        base_path = os.path.join(SAVE_PATH, f"models--{args.model.replace('/', '--')}")
+        base_path = os.path.join(SAVE_PATH, f"models--{model.replace('/', '--')}")
         snapshots_path = os.path.join(base_path, "snapshots")
 
         if os.path.exists(snapshots_path):
@@ -84,11 +81,11 @@ def setup_model():
             raise RuntimeError(f"Could not determine model directory inside {SAVE_PATH}")
 
     # Step 2: Replace tokenizer config if it's a Qwen2.5 model
-    if "Qwen2.5" in args.model:
+    if "Qwen2.5" in model:
         print(f"Replacing tokenizer_config.json in {model_dir}")
         os.system(f"cp {TOKENIZER_CONFIG_PATH} {model_dir}/tokenizer_config.json")
     else:
-        print(f"Warning: Model {args.model} is not Qwen2.5. Skipping tokenizer modification.")
+        print(f"Warning: Model {model} is not Qwen2.5. Skipping tokenizer modification.")
 
     print("Model setup complete.")
     return model_dir  # Pass back the exact model path
@@ -213,13 +210,9 @@ def export_model(model=None, tokenizer=None):
         )
 
 
-def load_model_and_tokenizer():
-    model_name = setup_model()
+def load_model_and_tokenizer(model,max_seq_length,lora_rank):
+    model_name = setup_model(model)
     print(f"{model_name} should now be present and ready for fine tuning")
-
-    max_seq_length = 1024 # Can increase for longer reasoning traces
-    lora_rank = 8 # 32 Larger rank = smarter, but slower
-    short_training_steps = 1
 
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name = model_name,
@@ -247,12 +240,13 @@ def load_model_and_tokenizer():
     model.config.sliding_window = None  # Disables SWA during training
     return model,tokenizer
 
-def training_setup( model = None, tokenizer = None, training_dataset=None, resume_from_checkpoint = False):
+def training_setup( model, tokenizer, training_dataset, max_seq_length, save_steps, max_steps, num_train_epochs=None, resume_from_checkpoint = False):
 
     max_prompt_length = 256
-    max_seq_length = 1024 # Can increase for longer reasoning traces
-    short_training_steps = 1
     
+    # Prioritize `max_steps` if explicitly set, otherwise use `num_train_epochs`
+    effective_max_steps = max_steps if max_steps > 0 else -1
+
     training_args = GRPOConfig(
         learning_rate = 5e-6,
         adam_beta1 = 0.9,
@@ -268,8 +262,8 @@ def training_setup( model = None, tokenizer = None, training_dataset=None, resum
         max_prompt_length = max_prompt_length,
         max_completion_length = max_seq_length - max_prompt_length,
         # num_train_epochs = 1, # Set to 1 for a full training run
-        max_steps = short_training_steps,
-        save_steps = 250,
+        max_steps = effective_max_steps,
+        save_steps = save_steps,
         max_grad_norm = 0.1,
         report_to = "none", # Can use Weights & Biases
         resume_from_checkpoint=resume_from_checkpoint,
@@ -305,13 +299,16 @@ def main():
     parser.add_argument("--save_steps", type=int, default=250, help="Checkpoint save frequency")
     parser.add_argument("--batch_size", type=int, default=1, help="Per-device batch size")
     parser.add_argument("--grad_accum", type=int, default=1, help="Gradient accumulation steps")
+    parser.add_argument("--max_seq_length", type=int, default=1024, help="Context length for the model")
+    parser.add_argument("--lora_rank", type=int, default=8, help="Higher is smarter, but slower 2,4,8,16,32,64...")
 
     args = parser.parse_args()
-    model,tokenizer = load_model_and_tokenizer()
 
-    #duplicated in load model and tokenizer  
-    max_seq_length = 1024 # Can increase for longer reasoning traces
-    lora_rank = 8 # 32 Larger rank = smarter, but slower
+    model,tokenizer = load_model_and_tokenizer(
+        model=args.model,
+        max_seq_length=args.max_seq_length,
+        lora_rank=args.lora_rank,
+    )
 
     """### Data Prep
     leverage [@willccbb](https://gist.github.com/willccbb/4676755236bb08cab5f4e54a0475d6fb) for data prep and all reward functions.
@@ -321,70 +318,32 @@ def main():
     ### Train the model
     Now set up GRPO Trainer and all configurations!
     """
-    trainer = training_setup(resume_from_checkpoint=args.resume, model=model, tokenizer=tokenizer, training_dataset=dataset)
+    trainer = training_setup(
+        resume_from_checkpoint=args.resume,
+        model=model,
+        tokenizer=tokenizer,
+        training_dataset=dataset,
+        save_steps=args.save_steps,
+        max_steps=args.max_steps,
+        num_train_epochs=args.num_train_epochs,
+        max_seq_length=args.max_seq_length,
+    )
+
     trainer.train()
-
-    print("Done.")
-
-
-    #export as gguf
-    export_model(model=model,tokenizer=tokenizer)
-
-    
-    """
-    ### Inference
-    Now let's try the model we just trained! First, let's first try the model without any GRPO trained:
-    """
-    
-    text = tokenizer.apply_chat_template([
-        {"role" : "user", "content" : "Calculate pi."},
-    ], tokenize = False, add_generation_prompt = True)
-    
-
-    sampling_params = SamplingParams(
-        temperature = 0.8,
-        top_p = 0.95,
-        max_tokens = 1024,
-    )
-    output = model.fast_generate(
-        [text],
-        sampling_params = sampling_params,
-        lora_request = None,
-    )[0].outputs[0].text
-    
-    print(f"pre-trained output:{output}")
-
-
-    """And now with the LoRA we just trained with GRPO - we first save the LoRA first!"""
-
-    model.save_lora("grpo_saved_lora")
-
-    """Now we load the LoRA and test:"""
-
-    text = tokenizer.apply_chat_template([
-        {"role" : "system", "content" : SYSTEM_PROMPT},
-        {"role" : "user", "content" : "Calculate pi."},
-    ], tokenize = False, add_generation_prompt = True)
-
-
-    sampling_params = SamplingParams(
-        temperature = 0.8,
-        top_p = 0.95,
-        max_tokens = 1024,
-    )
-    output = model.fast_generate(
-        text,
-        sampling_params = sampling_params,
-        lora_request = model.load_lora("grpo_saved_lora"),
-    )[0].outputs[0].text
-
-    print(f"\n\nfine tuned output:{output}")
-
     
     # needed to make a graceful exit from multi-gpu
     if dist.is_initialized():
         print("Destroying NCCL process group before exit...")
         dist.destroy_process_group()
+
+    print("Done.")
+
+
+    #save the lora and export as gguf
+    #todo: export model needs work
+    model.save_lora("grpo_saved_lora")
+    export_model(model=model,tokenizer=tokenizer)
+
 
 if __name__ == "__main__":
     main()
