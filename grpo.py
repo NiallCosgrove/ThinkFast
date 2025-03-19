@@ -14,7 +14,7 @@ import argparse
 import torch
 import json
 import re
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM
 from huggingface_hub import snapshot_download
 import torch.distributed as dist
 from datasets import load_dataset, Dataset
@@ -219,13 +219,6 @@ def load_model_and_tokenizer(model,max_seq_length,lora_rank, resume_from_checkpo
     model_name = setup_model(model)
     print(f"{model_name} should now be present and ready for fine tuning")
 
-    # If resuming, use the latest checkpoint directory instead of the base model
-    #if resume_from_checkpoint:
-    #    checkpoint_path = get_latest_checkpoint("outputs")
-    #    if checkpoint_path:
-    #        print(f"Resuming model from checkpoint: {checkpoint_path}")
-    #        model_name = checkpoint_path  # Override with checkpoint path
-    
     print(f"Loading model from: {model_name}")
 
     model, tokenizer = FastLanguageModel.from_pretrained(
@@ -254,12 +247,9 @@ def load_model_and_tokenizer(model,max_seq_length,lora_rank, resume_from_checkpo
     model.config.sliding_window = None  # Disables SWA during training
     return model,tokenizer
 
-def training_setup( model, tokenizer, training_dataset, max_seq_length, save_steps, max_steps, num_train_epochs=None, resume_from_checkpoint = False):
+def training_setup( model, tokenizer, training_dataset, max_seq_length, save_steps, max_steps=-1, num_train_epochs=1, resume_from_checkpoint = False):
 
     max_prompt_length = 256
-    
-    # Prioritize `max_steps` if explicitly set, otherwise use `num_train_epochs`
-    effective_max_steps = max_steps if max_steps > 0 else -1
     
     training_args = GRPOConfig(
         learning_rate = 5e-6,
@@ -275,8 +265,8 @@ def training_setup( model, tokenizer, training_dataset, max_seq_length, save_ste
         num_generations = 2, # Decrease if out of memory
         max_prompt_length = max_prompt_length,
         max_completion_length = max_seq_length - max_prompt_length,
-        # num_train_epochs = 1, # Set to 1 for a full training run
-        max_steps = effective_max_steps,
+        num_train_epochs = num_train_epochs, # Set to 1 for a full training run
+        max_steps = max_steps,
         save_steps = save_steps,
         max_grad_norm = 0.1,
         report_to = "none", # Can use Weights & Biases
@@ -307,9 +297,8 @@ def main():
     parser.add_argument("--resume", action="store_true", help="Resume from latest checkpoint if available")
 
     # Training Hyperparameters
-    parser.add_argument("--short_training_steps", type=int, default=1, help="Quick test training steps")
     parser.add_argument("--num_train_epochs", type=int, default=1, help="Number of training epochs")
-    parser.add_argument("--max_steps", type=int, default=-1, help="Override max training steps (default: uses short_training_steps)")
+    parser.add_argument("--max_steps", type=int, default=-1, help="Override max training steps (default: -1) set this to exit training early")
     parser.add_argument("--save_steps", type=int, default=250, help="Checkpoint save frequency")
     parser.add_argument("--batch_size", type=int, default=1, help="Per-device batch size")
     parser.add_argument("--grad_accum", type=int, default=1, help="Gradient accumulation steps")
