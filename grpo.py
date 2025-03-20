@@ -21,7 +21,9 @@ from datasets import load_dataset, Dataset
 from trl import GRPOConfig, GRPOTrainer
 from vllm import SamplingParams
 
-DEFAULT_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
+#DEFAULT_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
+DEFAULT_MODEL = "Qwen/Qwen2.5-7B-Instruct"
+
 SAVE_PATH = "./model"
 TOKENIZER_CONFIG_PATH = "qwen2.5-reasoning-template-config.json"
 
@@ -65,7 +67,7 @@ def setup_model(model):
         )
 
         print(f"Model cached at: {model_dir}")
-
+        exit()
     else:
         # Model directory already exists, find the latest snapshot by modification time
         base_path = os.path.join(SAVE_PATH, f"models--{model.replace('/', '--')}")
@@ -313,6 +315,7 @@ def main():
         lora_rank=args.lora_rank,
         resume_from_checkpoint=args.resume,
     )
+
 
     """### Data Prep
     leverage [@willccbb](https://gist.github.com/willccbb/4676755236bb08cab5f4e54a0475d6fb) for data prep and all reward functions.
