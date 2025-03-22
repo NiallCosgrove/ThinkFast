@@ -3,40 +3,45 @@ set -e  # Stop on error
 
 echo "🚀 Setting up environment..."
 
-# Ensure Python 3.11 is installed
-if ! python3.11 --version &>/dev/null; then
-    echo "⚠️ Python 3.11 not found! Installing..."
-    apt update && apt install -y python3.11 python3.11-venv python3.11-dev python3-pip
-fi
-
 # needed to build llama.cpp  - see the build_llama.sh script
+echo "installing build essentials"
 apt update && apt install -y build-essential cmake libssl-dev libfftw3-dev emacs   # emacs is technically optional (for some ^^)
 
-# Use Python 3.11 explicitly
-PYTHON=python3.11
-export PATH="/usr/bin/python3.11:$PATH"
+# Clone llama.cpp if not already present
+echo "cloning llama.cpp"
+if [ ! -d "llama.cpp" ]; then
+    git clone https://github.com/ggml-org/llama.cpp
+fi
+
+# Enter the llama.cpp directory
+cd llama.cpp
+
+# Build llama.cpp
+echo "building llama.cpp"
+cmake -B build
+cmake --build build --config Release -j $(nproc)
+
+# Symlink llama-quantize to the root of llama.cpp
+echo "symlinking llama_quantize"
+ln -sf build/bin/llama-quantize ./llama-quantize
+cd ..
+
+echo "llama.cpp built successfully and llama-quantize symlinked."
 
 # Create & activate virtual environment
+echo "activating venv"
 if [ ! -d "thinkfast-env" ]; then
     $PYTHON -m venv thinkfast-env
 fi
 source thinkfast-env/bin/activate
 
 # Ensure pip is up to date
+echo "updating pip"
 pip install --upgrade pip
 
-# Install correct PyTorch version for CUDA
-if python -c "import torch; print(torch.cuda.is_available())" | grep -q "True"; then
-    echo "✅ CUDA detected! Installing GPU-accelerated PyTorch..."
-    pip install torch transformers huggingface_hub unsloth trl accelerate vllm
-else
-    echo "⚠️ No CUDA detected,!!!  unsloth needs cuda!!!⚠️"
-    exit 1
-fi
-
 # Install other dependencies
+echo "installing requirements"
 pip install -r requirements.txt
 
 echo "✅ Environment setup complete!"
-echo "To activate, run: source thinkfast-env/bin/activate"
-echo "run build_llama.sh next or grpo.py wont be able to export to gguf!"
+
