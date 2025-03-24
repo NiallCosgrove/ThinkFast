@@ -2,23 +2,35 @@
 set -e  # Stop on error
 
 echo "🚀 Setting up environment..."
+#!/usr/bin/env bash
+set -e
 
-# needed to build llama.cpp  - see the build_llama.sh script
-echo "installing build essentials"
-apt update && apt install -y build-essential cmake libssl-dev libfftw3-dev emacs   # emacs is technically optional (for some ^^)
+# Install dependencies
+apt-get update
+apt-get install -y \
+  build-essential \
+  cmake \
+  libssl-dev \
+  libfftw3-dev \
+  libopenblas-dev \
+  pkg-config \
+  emacs \
+  git
 
-# Clone llama.cpp if not already present
-echo "cloning llama.cpp"
-if [ ! -d "llama.cpp" ]; then
-    git clone https://github.com/ggml-org/llama.cpp
+# Clone updated llama.cpp repo
+if [ ! -d llama.cpp ]; then
+  git clone https://github.com/ggml-org/llama.cpp.git
 fi
 
-# Enter the llama.cpp directory
 cd llama.cpp
 
-# Build llama.cpp
-echo "building llama.cpp"
-cmake -B build
+# Build with CUDA, CUBLAS, OpenBLAS
+cmake -B build \
+  -DGGML_CUDA=on \
+  -DGGML_CUBLAS=on \
+  -DGGML_BLAS=on \
+  -DGGML_BLAS_VENDOR=OpenBLAS
+
 cmake --build build --config Release -j $(nproc)
 
 # Symlink llama-quantize to the root of llama.cpp
@@ -31,7 +43,7 @@ echo "llama.cpp built successfully and llama-quantize symlinked."
 # Create & activate virtual environment
 echo "activating venv"
 if [ ! -d "thinkfast-env" ]; then
-    $PYTHON -m venv thinkfast-env
+    python -m venv thinkfast-env
 fi
 source thinkfast-env/bin/activate
 
